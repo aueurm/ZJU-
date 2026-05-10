@@ -2,6 +2,9 @@
   <div class="report-panel">
     <h4>整合报告</h4>
 
+    <div v-if="loading" class="loading">加载中...</div>
+    <template v-else>
+
     <div class="stats">
       <div class="stat-item">
         <div class="label">原始教材</div>
@@ -9,7 +12,7 @@
       </div>
       <div class="stat-item">
         <div class="label">原始字数</div>
-        <div class="value">{{ stats.original_chars | formatNumber }} 字</div>
+        <div class="value">{{ stats.original_chars.toLocaleString() }} 字</div>
       </div>
       <div class="stat-item">
         <div class="label">压缩比</div>
@@ -21,11 +24,12 @@
 
     <div class="decisions-summary">
       <h5>决策摘要</h5>
-      <div class="summary-grid">
+      <div v-if="hasData" class="summary-grid">
         <div class="summary-item merge">合并: {{ decisionsSummary.merge }}</div>
         <div class="summary-item keep">保留: {{ decisionsSummary.keep }}</div>
         <div class="summary-item remove">删除: {{ decisionsSummary.remove }}</div>
       </div>
+      <div v-else class="no-data">暂无整合决策</div>
     </div>
 
     <div class="graph-stats">
@@ -35,19 +39,26 @@
       <div>关系边数: {{ stats.edge_count }}</div>
     </div>
 
-    <button class="btn-export" @click="exportReport">导出报告</button>
+    <div v-if="hasData" class="compression-info">
+      压缩比 = 整合后节点数 / 整合前节点数
+    </div>
+
+    <button class="btn-export" @click="exportReport" :disabled="!hasData">导出报告</button>
+    </template>
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue'
+import { getMergeStats, getMergeDecisions, getMergedGraph } from '../api'
 
 export default {
   name: 'ReportPanel',
   setup() {
+    const loading = ref(true)
     const stats = ref({
-      original_count: 7,
-      original_chars: 1000000,
+      original_count: 0,
+      original_chars: 0,
       compression_ratio: 0,
       original_nodes: 0,
       merged_nodes: 0,
@@ -55,10 +66,10 @@ export default {
     })
 
     const decisionsSummary = ref({ merge: 0, keep: 0, remove: 0 })
+    const hasData = ref(false)
 
     const exportReport = () => {
-      // 生成Markdown报告
-      const content = `# 整合报告\n\n## 整合概览\n\n| 指标 | 数值 |\n|------|------|\n| 原始教材 | ${stats.value.original_count}本 |\n| 原始字数 | ${stats.value.original_chars} |\n| 压缩比 | ${(stats.value.compression_ratio * 100).toFixed(1)}% |\n\n`
+      const content = `# 整合报告\n\n## 整合概览\n\n| 指标 | 数值 |\n|------|------|\n| 原始教材 | ${stats.value.original_count}本 |\n| 原始字数 | ${stats.value.original_chars.toLocaleString()} |\n| 压缩比 | ${(stats.value.compression_ratio * 100).toFixed(1)}% |\n\n## 图谱统计\n\n| 指标 | 数值 |\n|------|------|\n| 整合前节点 | ${stats.value.original_nodes} |\n| 整合后节点 | ${stats.value.merged_nodes} |\n| 关系边数 | ${stats.value.edge_count} |\n\n## 决策摘要\n\n| 操作 | 数量 |\n|------|------|\n| 合并 | ${decisionsSummary.value.merge} |\n| 保留 | ${decisionsSummary.value.keep} |\n| 删除 | ${decisionsSummary.value.remove} |\n`
       const blob = new Blob([content], { type: 'text/markdown' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -67,17 +78,57 @@ export default {
       a.click()
     }
 
-    onMounted(() => {
-      // 加载实际统计数据
+    onMounted(async () => {
+      try {
+        const [statsRes, decisionsRes, graphRes] = await Promise.all([
+          getMergeStats(),
+          getMergeDecisions(),
+          getMergedGraph()
+        ])
+
+        const mergeStats = statsRes.data || {}
+        const decisions = decisionsRes.data?.decisions || []
+        const mergedGraph = graphRes.data || { nodes: [], edges: [] }
+
+        const summary = { merge: 0, keep: 0, remove: 0 }
+        decisions.forEach(d => {
+          if (summary.hasOwnProperty(d.action)) {
+            summary[d.action]++
+          }
+        })
+
+        stats.value = {
+          original_count: mergeStats.original_count || 0,
+          original_chars: mergeStats.original_chars || 0,
+          compression_ratio: mergeStats.compression_ratio || 0,
+          original_nodes: mergeStats.original_nodes || 0,
+          merged_nodes: mergeStats.merged_nodes || 0,
+          edge_count: mergeStats.edge_count || mergedGraph.edges?.length || 0
+        }
+
+        decisionsSummary.value = summary
+        hasData.value = decisions.length > 0 || mergedGraph.nodes?.length > 0
+      } catch (err) {
+        console.error('加载报告数据失败', err)
+      } finally {
+        loading.value = false
+      }
     })
 
-    return { stats, decisionsSummary, exportReport }
+    return { stats, decisionsSummary, exportReport, hasData, loading }
   }
 }
 </script>
 
 <style scoped>
 .report-panel h4 { margin-bottom: 16px; }
+.report-panel .loading,
+.report-panel .no-data {
+  text-align: center;
+  padding: 40px 0;
+  color: #999;
+  font-size: 14px;
+}
 
 .stats {
   display: grid;
@@ -113,6 +164,13 @@ export default {
 .graph-stats h5 { font-size: 14px; margin-bottom: 8px; }
 .graph-stats div { font-size: 13px; color: #666; margin-bottom: 4px; }
 
+.compression-info {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
 .btn-export {
   width: 100%;
   padding: 10px;
@@ -121,5 +179,9 @@ export default {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+.btn-export:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }
 </style>

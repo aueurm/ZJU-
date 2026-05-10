@@ -76,6 +76,12 @@ export const mergeTextbooks = (textbookIds) => api.post('/merge', { textbook_ids
 export const getMergeDecisions = () => api.get('/merge/decisions')
 
 /**
+ * 获取整合统计信息
+ * @returns {Promise} 统计信息
+ */
+export const getMergeStats = () => api.get('/merge/stats')
+
+/**
  * 确认整合
  * @returns {Promise} 确认结果
  */
