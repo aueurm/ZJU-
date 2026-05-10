@@ -1,9 +1,9 @@
 # 多阶段构建 - 前端
 FROM node:18-alpine AS frontend-build
 WORKDIR /app/frontend
-COPY src/frontend/package*.json ./
+COPY package*.json ./
+COPY src/frontend/ ./src/frontend/
 RUN npm ci
-COPY src/frontend/ ./
 RUN npm run build
 
 # 后端运行环境
