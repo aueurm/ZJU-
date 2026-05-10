@@ -2,8 +2,10 @@
 FROM node:18-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY package*.json ./
-COPY src/frontend/ ./src/frontend/
 COPY src/frontend/index.html ./
+COPY src/frontend/src ./src/
+COPY src/frontend/uno.config.js ./
+COPY src/frontend/vite.config.js ./
 RUN npm ci
 RUN npm run build
 
