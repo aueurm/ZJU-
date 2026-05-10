@@ -2,7 +2,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  root: '.',
   plugins: [vue()],
+  build: {
+    outDir: 'dist'
+  },
   server: {
     // 开发服务器代理配置 - 将/api请求代理到后端
     proxy: {
